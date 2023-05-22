@@ -2,11 +2,13 @@
 import FusionCharts from 'fusioncharts/core';
 // Include the chart from viz folder
 import CandleStick from 'fusioncharts/viz/candlestick';
+import Column3D from 'fusioncharts/viz/column3d';
 // Include the fusion theme
 import FusionTheme from 'fusioncharts/themes/es/fusioncharts.theme.fusion';
 // Add the chart and theme as dependency
 // E.g. FusionCharts.addDep(ChartType)
 FusionCharts.addDep(CandleStick);
+FusionCharts.addDep(Column3D);
 FusionCharts.addDep(FusionTheme);
 
 // Deribit API request
@@ -29,9 +31,11 @@ var msg =
 };
 var ws = new WebSocket('wss://www.deribit.com/ws/api/v2');
 ws.onmessage = function (e) {
+  //Preparing the data
   let response = JSON.parse(e.data);
   let result = response.result;
-  let chartData = [];
+  //data for candlestick chart
+  let candleChartData = [];
   function OHLC (open, high, low, close, x, volume) {
     this.open = open;
     this.high = high;
@@ -42,13 +46,31 @@ ws.onmessage = function (e) {
   }
   let count = 0;
   result.open.forEach(e => {
-    chartData.push(new OHLC(e, result.high[count], result.low[count], result.close[count], count+1, result.volume[count]));
+    candleChartData.push(new OHLC(e, result.high[count], result.low[count], result.close[count], count+1, result.volume[count]));
+    count++;
+  });
+  //data for simple column chart
+  let columnChartData = [];
+  function ColumnChart (label, value) {
+    this.label = label;
+    this.value = value;
+  }
+  count = 0;
+  let tick;
+  let month;
+  let date;
+  result.volume.forEach(e => {
+    tick = new Date(result.ticks[count]);
+    month = tick.getMonth();
+    date = tick.getDate();
+    columnChartData.push(new ColumnChart(`${month}/${date}` , Math.round(e)));
     count++;
   });
 
   // Charting
   // Create a JSON object to store the chart configurations
-  const chartConfigs = {
+  // Candlestick chart
+  const candleChartConfigs = {
     //Specify the chart type
     type: "candlestick",
     //Set the container object
@@ -96,18 +118,39 @@ ws.onmessage = function (e) {
       ],
       "dataset": [
         {
-          "data": chartData
+          "data": candleChartData
         },
       ]
     }
   };
+  //Simple column chart
+  const columnChartConfigs = {
+    type: "column3D",
+    renderAt: "simple-column-chart",
+    width: "100%",
+    height: "70%",
+    dataFormat: "json",
+    dataSource: {
+      "chart": {
+        "caption": "Deribit BTC-PERPETUAL Daily Volume",
+        "subCaption": "Last 3 months",
+        "xAxisName": "Date",
+        "yAxisName": "Volume",
+        "theme": "fusion"
+      },
+      "data":columnChartData
+    }
+  };
+
 
   //render the chart
   FusionCharts.ready(function(){
-    var fusioncharts = new FusionCharts(chartConfigs);
-    fusioncharts.render();
-  }); 
-  console.log('received from server : ', chartData);
+    var candlestickCharts = new FusionCharts(candleChartConfigs);
+    candlestickCharts.render();
+    var columnCharts = new FusionCharts(columnChartConfigs);
+    columnCharts.render();
+  });
+  console.log('received from server : ', candleChartData, columnChartData);
 };
 ws.onopen = function () {
     ws.send(JSON.stringify(msg));
